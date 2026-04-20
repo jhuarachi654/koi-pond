@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Interactive Koi Pond</title>
+    <!-- Version: NO FOOD - Updated 2026-04-19 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sentient:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            cursor: pointer;
+        }
+        
+        canvas {
+            display: block;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+            -ms-interpolation-mode: nearest-neighbor;
+        }
+        
+        .instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .text-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .text-overlay .title {
+            font-family: 'Sentient', sans-serif;
+            font-size: 32px;
+            font-weight: 500;
+            margin: 0 0 8px 0;
+            line-height: 1.2;
+        }
+        
+        .text-overlay .subtitle {
+            font-family: 'Sentient', sans-serif;
+            font-size: 18px;
+            font-weight: 400;
+            margin: 0 0 12px 0;
+            line-height: 1.3;
+        }
+        
+        .text-overlay .call-to-action {
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 400;
+            margin: 0;
+            opacity: 0.7;
+            line-height: 1.4;
+        }
+        
+        /* Responsive scaling for mobile devices */
+        @media (max-width: 768px) {
+            .text-overlay {
+                top: 15px;
+                left: 15px;
+            }
+            
+            .text-overlay .title {
+                font-size: 24px;
+                margin: 0 0 6px 0;
+            }
+            
+            .text-overlay .subtitle {
+                font-size: 14px;
+                margin: 0 0 8px 0;
+            }
+            
+            .text-overlay .call-to-action {
+                font-size: 12px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .text-overlay {
+                top: 12px;
+                left: 12px;
+            }
+            
+            .text-overlay .title {
+                font-size: 20px;
+                margin: 0 0 4px 0;
+            }
+            
+            .text-overlay .subtitle {
+                font-size: 12px;
+                margin: 0 0 6px 0;
+            }
+            
+            .text-overlay .call-to-action {
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Pond Music Audio -->
+    <audio id="pondMusic" autoplay loop volume="0.1">
+        <source src="Pond Music.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    
+    <div class="text-overlay">
+        <div class="title">Ripple</div>
+        <div class="subtitle">a digital and interactive live pond</div>
+        <div class="call-to-action">tap to explore</div>
+    </div>
+    
+        <canvas id="pond"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('pond');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        
+        // Responsive scaling system
+        let globalScale = 1;
+        let baseWidth = window.innerWidth;
+        let baseHeight = window.innerHeight;
+        
+        function updateResponsiveScale() {
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            
+            // Calculate scale factor based on screen size
+            if (screenWidth <= 480) {
+                globalScale = Math.min(screenWidth / 480, screenHeight / 800);
+            } else if (screenWidth <= 768) {
+                globalScale = Math.min(screenWidth / 768, screenHeight / 1024);
+            } else {
+                globalScale = 1;
+            }
+            
+            // Update canvas size
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = screenWidth * dpr;
+            canvas.height = screenHeight * dpr;
+            canvas.style.width = screenWidth + 'px';
+            canvas.style.height = screenHeight + 'px';
+            ctx.scale(dpr, dpr);
+            
+            baseWidth = screenWidth;
+            baseHeight = screenHeight;
+        }
+        
+        // Initialize responsive scaling
+        updateResponsiveScale();
+        window.addEventListener('resize', updateResponsiveScale);
+        
+        // Initialize pond music
+        const pondMusic = document.getElementById('pondMusic');
+        let musicStarted = false;
+        
+        // Function to start music (handles autoplay restrictions)
+        function startMusic() {
+            if (!musicStarted) {
+                pondMusic.play().then(() => {
+                    musicStarted = true;
+                    console.log('Pond music started automatically');
+                }).catch(error => {
+                    console.log('Autoplay prevented, will start on first user interaction');
+                    // Add click listener to start music on first interaction
+                    document.addEventListener('click', function startMusicOnClick() {
+                        pondMusic.play().then(() => {
+                            musicStarted = true;
+                            console.log('Pond music started on user interaction');
+                        }).catch(err => {
+                            console.log('Could not start music:', err);
+                        });
+                        // Remove this listener after first click
+                        document.removeEventListener('click', startMusicOnClick);
+                    }, { once: true });
+                });
+            }
+        }
+        
+        // Try to start music immediately
+        startMusic();
+        
+        // Get device pixel ratio for crisp rendering on high-DPI displays
+        const dpr = window.devicePixelRatio || 1;
+        
+        // Set canvas size with high-DPI support
+        function resizeCanvas() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            
+            // Set actual canvas size (accounting for device pixel ratio)
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            
+            // Set display size (CSS pixels)
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+            
+            // Scale context to match device pixel ratio
+            ctx.scale(dpr, dpr);
+            
+            // Enable crisp image rendering
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Asset loading
+        const assets = {};
+        const assetList = [
+            'background.svg',
+            'koi-black-left.png',
+            'koi-orange-left.png', 
+            'koi-red-left.png',
+            'koi-black-right.png',
+            'koi-orange-right.png', 
+            'koi-red-right.png',
+            'koi-black-straight.png',
+            'koi-orange-straight.png', 
+            'koi-red-straight.png',
+            'lilypad-blue-small.png',
+            'lilypad-darkgreen-large.png',
+            'lilypad-darkgreen-small.png',
+            'lilypad-green-large.png',
+            'lilypad-green-small.png',
+            'dragonfly-1.png',
+            'dragonfly-2.png',
+            'ripple.png',
+            'Lotus.png'
+        ];
+        
+        let loadedAssets = 0;
+        assetList.forEach(name => {
+            const img = new Image();
+            // Add cache-busting timestamp for koi fish and dragonfly assets
+            if (name.includes('koi-') || name.includes('dragonfly')) {
+                img.src = `${name}?t=${Date.now()}`;
+            } else {
+                img.src = `${name}`;
+            }
+            img.onload = () => {
+                loadedAssets++;
+                if (loadedAssets === assetList.length) {
+                    init();
+                }
+            };
+            assets[name.replace(/\.(png|svg)$/, '')] = img;
+        });
+        
+        // Game objects
+        let lilyPads = [];
+        let koiFish = [];
+        let dragonflies = [];
+        let ripples = [];
+                
+        class LilyPad {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.baseX = x;
+                this.baseY = y;
+                this.type = type;
+                this.bobOffset = Math.random() * Math.PI * 2;
+                this.bobSpeed = 0.1 + Math.random() * 0.05; // Very slow breathing
+                this.scale = 0.3 + Math.random() * 0.2;
+                this.isDragging = false;
+                this.dragOffsetX = 0;
+                this.dragOffsetY = 0;
+                
+                // Drag continuation properties only
+                this.dragVelocityX = 0;
+                this.dragVelocityY = 0;
+                this.waterResistance = 0.92; // Water resistance for 2-3 second stop
+                this.maxSpeed = 8; // Maximum speed cap
+            }
+            
+            update(time) {
+                if (!this.isDragging) {
+                    // Apply drag continuation with water resistance only
+                    if (Math.abs(this.dragVelocityX) > 0.01 || Math.abs(this.dragVelocityY) > 0.01) {
+                        // Cap speed to maximum
+                        const speed = Math.hypot(this.dragVelocityX, this.dragVelocityY);
+                        if (speed > this.maxSpeed) {
+                            this.dragVelocityX = (this.dragVelocityX / speed) * this.maxSpeed;
+                            this.dragVelocityY = (this.dragVelocityY / speed) * this.maxSpeed;
+                        }
+                        
+                        this.x += this.dragVelocityX;
+                        this.y += this.dragVelocityY;
+                        this.dragVelocityX *= this.waterResistance;
+                        this.dragVelocityY *= this.waterResistance;
+                        
+                        // Enforce strict boundaries
+                        this.enforceBoundaries();
+                    }
+                    
+                    // Absolute boundary enforcement - always active
+                    this.enforceBoundaries();
+                }
+            }
+            
+                        
+            enforceBoundaries() {
+                const padRadius = 40 * this.scale;
+                const edgeBuffer = 10; // Larger buffer for absolute safety
+                
+                // Absolute boundary enforcement - no exceptions
+                const minX = padRadius + edgeBuffer;
+                const maxX = canvas.width - padRadius - edgeBuffer;
+                const minY = padRadius + edgeBuffer;
+                const maxY = canvas.height - padRadius - edgeBuffer;
+                
+                // Hard clamp to boundaries
+                this.x = Math.max(minX, Math.min(maxX, this.x));
+                this.y = Math.max(minY, Math.min(maxY, this.y));
+                
+                // Stop all movement if at boundary
+                if (this.x <= minX || this.x >= maxX) {
+                    this.dragVelocityX = 0;
+                }
+                if (this.y <= minY || this.y >= maxY) {
+                    this.dragVelocityY = 0;
+                }
+            }
+            
+            draw() {
+                const img = assets[this.type];
+                const scaledWidth = img.width * this.scale;
+                const scaledHeight = img.height * this.scale;
+                ctx.drawImage(img, this.x - scaledWidth/2, this.y - scaledHeight/2, scaledWidth, scaledHeight);
+            }
+            
+            isPointInside(x, y) {
+                const img = assets[this.type];
+                const scaledWidth = img.width * this.scale;
+                const scaledHeight = img.height * this.scale;
+                return x >= this.x - scaledWidth/2 && x <= this.x + scaledWidth/2 &&
+                       y >= this.y - scaledHeight/2 && y <= this.y + scaledHeight/2;
+            }
+            
+            startDrag(mouseX, mouseY) {
+                this.isDragging = true;
+                this.dragOffsetX = mouseX - this.x;
+                this.dragOffsetY = mouseY - this.y;
+                this.velocityX = 0;
+                this.velocityY = 0;
+            }
+            
+            drag(mouseX, mouseY) {
+                if (this.isDragging) {
+                    const newX = mouseX - this.dragOffsetX;
+                    const newY = mouseY - this.dragOffsetY;
+                    
+                    // Track drag velocity for continuation
+                    this.dragVelocityX = newX - this.x;
+                    this.dragVelocityY = newY - this.y;
+                    
+                    this.x = newX;
+                    this.y = newY;
+                    
+                    // Fish react to moving lily pad - avoid if startled
+                    koiFish.forEach(fish => {
+                        const distance = Math.hypot(fish.x - this.x, fish.y - this.y);
+                        if (distance < 80) { // React if very close
+                            if (!fish.isReacting || fish.reactionType !== 'avoid') {
+                                fish.startReaction('avoid', {x: this.x, y: this.y}, 1500, 1.8);
+                            }
+                        }
+                    });
+                }
+            }
+            
+            endDrag() {
+                this.isDragging = false;
+                // Continue moving with drag velocity, which will gradually slow down
+            }
+        }
+        
+        class KoiFish {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.baseScale = (0.12 + Math.random() * 0.08) * 1.1 * globalScale; // 13.2-22% (1.1x bigger) with responsive scaling
+                this.scale = this.baseScale;
+                this.opacity = 1.0;
+                
+                // Individualized movement characteristics - calmer movement
+                this.baseSpeed = 0.5 + Math.random() * 0.6; // Speed range: 0.5-1.1
+                this.speed = this.baseSpeed;
+                this.direction = Math.random() * Math.PI * 2; // Full 360 direction
+                
+                // Personality traits for varied behavior
+                this.personality = Math.random(); // 0-1, affects various behaviors
+                this.laziness = 0.3 + Math.random() * 0.5; // How often they rest
+                this.curiosity = Math.random(); // How likely they are to explore
+                this.social = Math.random(); // How much they follow other fish
+                
+                // Apply personality-based speed adjustments
+                const curiosityBonus = this.curiosity * 0.3; // Curious fish swim faster
+                const lazinessPenalty = this.laziness * 0.2; // Lazy fish swim slower
+                this.baseSpeed = Math.max(0.5, Math.min(1.1, this.baseSpeed + curiosityBonus - lazinessPenalty));
+                
+                // Apply size-speed correlation (larger fish swim slightly slower)
+                const sizePenalty = (this.baseScale - 0.13) * 2; // Scale penalty based on size
+                this.baseSpeed = Math.max(0.5, this.baseSpeed - sizePenalty);
+                
+                // Store original baseSpeed for type-specific adjustments
+                this.originalBaseSpeed = this.baseSpeed;
+                this.speed = this.baseSpeed;
+                
+                // Nudge velocity properties for click interactions
+                this.dragVelocityX = 0;
+                this.dragVelocityY = 0;
+                this.waterResistance = 0.92; // Water physics like lily pads
+                this.isNudging = false;
+                this.shouldPickNewDestination = false;
+                
+                // Destination system for natural movement
+                this.targetX = x;
+                this.targetY = y;
+                this.isPaused = false;
+                this.pauseStartTime = 0;
+                this.pauseDuration = 1000 + Math.random() * 1000; // 1-2 second pause
+                
+                // Wide curved path parameters - more varied
+                this.curveRadius = 100 + Math.random() * 400; // Much more varied: 100-500 pixel radius
+                this.curveDirection = Math.random() > 0.5 ? 1 : -1; // Clockwise or counter-clockwise
+                this.curveSpeed = 0.001 + Math.random() * 0.002; // More varied curve following
+                
+                // Individual sine wave for natural movement - more variation
+                this.sineOffset = Math.random() * Math.PI * 2;
+                this.sineAmplitude = 8 + Math.random() * 20; // Much more varied amplitude
+                this.sineFrequency = 0.008 + Math.random() * 0.015; // More varied frequency
+                
+                // Behavior timing
+                this.nextBehaviorChange = Date.now() + Math.random() * 10000 + 5000; // 5-15 seconds
+                this.currentBehavior = 'cruising';
+                this.behaviorDuration = 3000 + Math.random() * 7000;
+                
+                // Dynamic speed variation properties
+                this.nextSpeedChange = Date.now() + Math.random() * 3000 + 1000; // 1-4 seconds
+                this.speedVariation = 0; // Current speed variation multiplier
+                
+                // Reaction properties
+                this.isReacting = false;
+                this.reactionType = null; // 'flee', 'approach', 'avoid'
+                this.reactionTarget = null;
+                this.reactionStartTime = 0;
+                this.reactionDuration = 0;
+                this.reactionSpeed = 0;
+                this.originalBehavior = 'cruising';
+                this.pauseStartTime = null;
+                
+                                
+                // Simple ellipse swimming properties
+                this.ellipseCenterX = this.x;
+                this.ellipseCenterY = this.y;
+                this.ellipseRadiusX = 200 + Math.random() * 300; // 200-500px horizontal radius
+                this.ellipseRadiusY = 150 + Math.random() * 200; // 150-350px vertical radius
+                this.ellipseAngle = Math.random() * Math.PI * 2; // Starting position on ellipse
+                this.ellipseSpeed = 0.0005 + Math.random() * 0.001; // Slower, more subtle ellipse speeds
+                
+                // State change properties
+                this.nextStateChange = Date.now() + Math.random() * 20000 + 10000; // 10-30 seconds
+                this.stateChangeDuration = 2000; // 2 seconds to transition
+                this.isTransitioning = false; // Track if fish is transitioning between types
+                this.transitionStartTime = 0;
+                
+                this.time = Math.random() * 1000; // Stagger start times
+                this.shadowOffset = 8;
+                
+                // Path memory for smooth curves
+                this.pathAngle = this.direction;
+                this.targetAngle = this.direction;
+                
+                // Removed departure behavior - fish now stay in pond continuously
+            }
+            
+            update() {
+                this.time++;
+                const now = Date.now();
+                
+                // Behavior system - change behaviors periodically
+                if (now > this.nextBehaviorChange) {
+                    this.changeBehavior();
+                    this.nextBehaviorChange = now + Math.random() * 15000 + 5000; // 5-20 seconds
+                }
+                
+                // Dynamic speed variation for more varied movement
+                if (now > this.nextSpeedChange && !this.isReacting) {
+                    // Apply random speed variation
+                    this.speedVariation = (Math.random() - 0.5) * 0.6; // ±30% speed variation
+                    this.speed = this.baseSpeed * (1 + this.speedVariation);
+                    this.nextSpeedChange = now + Math.random() * 2000 + 500; // 0.5-2.5 seconds
+                }
+                
+                // Removed departure behavior - fish now stay in pond continuously
+                
+                // Apply behaviors only to straight fish (left/right fish use pure ellipse movement)
+                if (this.fishType === 'straight') {
+                    this.applyCurrentBehavior();
+                }
+                
+                // Smooth speed transition back to base speed
+                this.speed += (this.baseSpeed - this.speed) * 0.1;
+                
+                // Check for state changes
+                if (Date.now() > this.nextStateChange && !this.isTransitioning) {
+                    this.isTransitioning = true;
+                    this.transitionStartTime = Date.now();
+                    this.changeFishType();
+                    this.nextStateChange = Date.now() + Math.random() * 20000 + 10000; // 10-30 seconds
+                }
+                
+                // Handle transition completion
+                if (this.isTransitioning && Date.now() - this.transitionStartTime > this.stateChangeDuration) {
+                    this.isTransitioning = false;
+                }
+                
+                // Handle nudge override from click interactions
+                if (Math.abs(this.dragVelocityX) > 0.01 || Math.abs(this.dragVelocityY) > 0.01) {
+                    this.isNudging = true;
+                    // Apply nudge movement
+                    this.x += this.dragVelocityX;
+                    this.y += this.dragVelocityY;
+                    // Apply water resistance
+                    this.dragVelocityX *= this.waterResistance;
+                    this.dragVelocityY *= this.waterResistance;
+                } else {
+                    this.isNudging = false;
+                }
+                
+                // Skip movement during transition to prevent diagonal swaying
+                if (!this.isTransitioning && !this.isNudging) {
+                        if (this.fishType === 'left') {
+                            // Left fish swim counterclockwise
+                            this.ellipseAngle -= this.ellipseSpeed;
+                            this.x = this.ellipseCenterX + Math.cos(this.ellipseAngle) * this.ellipseRadiusX;
+                            this.y = this.ellipseCenterY + Math.sin(this.ellipseAngle) * this.ellipseRadiusY;
+                            
+                        } else if (this.fishType === 'right') {
+                            // Right fish swim clockwise
+                            this.ellipseAngle += this.ellipseSpeed;
+                            this.x = this.ellipseCenterX + Math.cos(this.ellipseAngle) * this.ellipseRadiusX;
+                            this.y = this.ellipseCenterY + Math.sin(this.ellipseAngle) * this.ellipseRadiusY;
+                            
+                        } else if (this.fishType === 'straight') {
+                        // Handle pause behavior
+                        if (this.isPaused) {
+                            // Check if pause is over
+                            if (Date.now() - this.pauseStartTime > this.pauseDuration) {
+                                this.pickNewDestination();
+                            }
+                        } else {
+                        // Destination-based movement like dragonflies
+                        const dx = this.targetX - this.x;
+                        const dy = this.targetY - this.y;
+                        const distance = Math.hypot(dx, dy);
+                        
+                        if (distance < 10) {
+                            // Reached destination, brief pause
+                            this.isPaused = true;
+                            this.pauseStartTime = Date.now();
+                            this.pauseDuration = 1000 + Math.random() * 1000; // 1-2 second
+                        } else {
+                            // Move toward target
+                            const moveX = (dx / distance) * this.speed;
+                            const moveY = (dy / distance) * this.speed;
+                            this.x += moveX;
+                            this.y += moveY;
+                            // Update direction to face movement
+                            this.direction = Math.atan2(dy, dx);
+                        }
+                        }
+                    }
+                }
+                
+                // Keep within pond bounds - prevent disappearing
+                const margin = 50;
+                
+                // Hard boundaries - wrap around if fish go too far
+                if (this.x < -margin) {
+                    this.x = canvas.width + margin - 10;
+                }
+                if (this.x > canvas.width + margin) {
+                    this.x = -margin + 10;
+                }
+                if (this.y < -margin) {
+                    this.y = canvas.height + margin - 10;
+                }
+                if (this.y > canvas.height + margin) {
+                    this.y = -margin + 10;
+                }
+                
+                // Fish now rotate to face direction of travel - no need for direction flipping
+                
+                // Check depth - fish under lily pads
+                this.checkDepth();
+                
+                // Handle reactions
+                this.updateReactions();
+            }
+            
+            startReaction(type, target, duration, speed) {
+                this.isReacting = true;
+                this.reactionType = type;
+                this.reactionTarget = target;
+                this.reactionStartTime = Date.now();
+                this.reactionDuration = duration;
+                this.reactionSpeed = speed;
+                this.originalBehavior = this.currentBehavior;
+            }
+            
+            updateReactions() {
+                if (this.isReacting) {
+                    const now = Date.now();
+                    const elapsed = now - this.reactionStartTime;
+                    
+                    if (elapsed > this.reactionDuration) {
+                        // End reaction, return to normal behavior
+                        this.isReacting = false;
+                        this.reactionType = null;
+                        this.reactionTarget = null;
+                        this.currentBehavior = this.originalBehavior;
+                        return;
+                    }
+                    
+                    // Continue reaction behavior
+                    switch (this.reactionType) {
+                        case 'flee':
+                            this.fleeFromTarget();
+                            break;
+                        case 'approach':
+                            this.approachTarget();
+                            break;
+                        case 'avoid':
+                            this.avoidTarget();
+                            break;
+                    }
+                }
+            }
+            
+            fleeFromTarget() {
+                if (!this.reactionTarget) return;
+                
+                const dx = this.x - this.reactionTarget.x;
+                const dy = this.y - this.reactionTarget.y;
+                const distance = Math.hypot(dx, dy);
+                
+                if (distance > 0) {
+                    const fleeAngle = Math.atan2(dy, dx);
+                    this.pathAngle += (fleeAngle - this.pathAngle) * 0.08;
+                    this.speed = this.baseSpeed * 1.8; // Gentler escape
+                }
+            }
+            
+            approachTarget() {
+                if (!this.reactionTarget) return;
+                
+                const dx = this.reactionTarget.x - this.x;
+                const dy = this.reactionTarget.y - this.y;
+                const distance = Math.hypot(dx, dy);
+                
+                if (distance > 15) { // Approach until very close
+                    const approachAngle = Math.atan2(dy, dx);
+                    this.pathAngle += (approachAngle - this.pathAngle) * 0.03; // Gentle turn
+                    // Gradually slow down as approaching
+                    const speedFactor = Math.max(0.3, distance / 50);
+                    this.speed = this.baseSpeed * 1.0 * speedFactor;
+                } else if (distance > 5) {
+                    // Very close - move slowly
+                    const approachAngle = Math.atan2(dy, dx);
+                    this.pathAngle += (approachAngle - this.pathAngle) * 0.02;
+                    this.speed = this.baseSpeed * 0.3;
+                } else {
+                    // At target - pause briefly
+                    this.speed = 0;
+                    // After a brief pause, end the reaction to swim away
+                    if (!this.pauseStartTime) {
+                        this.pauseStartTime = Date.now();
+                    }
+                    if (Date.now() - this.pauseStartTime > 500) {
+                        this.reactionType = null;
+                        this.isReacting = false;
+                        this.pauseStartTime = null;
+                    }
+                }
+            }
+            
+            avoidTarget() {
+                if (!this.reactionTarget) return;
+                
+                const dx = this.x - this.reactionTarget.x;
+                const dy = this.y - this.reactionTarget.y;
+                const distance = Math.hypot(dx, dy);
+                
+                if (distance < 100 && distance > 0) { // Only avoid if close
+                    const avoidAngle = Math.atan2(dy, dx);
+                    this.pathAngle += (avoidAngle - this.pathAngle) * 0.06;
+                    this.speed = this.baseSpeed * 1.3; // More gentle escape
+                }
+            }
+            
+            changeBehavior() {
+                const behaviors = ['cruising', 'resting', 'exploring'];
+                const weights = [
+                    0.8 - this.laziness * 0.2, // More cruising, less affected by laziness
+                    this.laziness * 0.3, // Much less resting
+                    this.curiosity // More likely to explore if curious
+                ];
+                
+                // Weighted random selection
+                const random = Math.random() * weights.reduce((a, b) => a + b, 0);
+                let sum = 0;
+                for (let i = 0; i < behaviors.length; i++) {
+                    sum += weights[i];
+                    if (random <= sum) {
+                        this.currentBehavior = behaviors[i];
+                        break;
+                    }
+                }
+                
+                this.behaviorDuration = 3000 + Math.random() * 7000; // 3-10 seconds
+            }
+            
+            applyCurrentBehavior() {
+                switch (this.currentBehavior) {
+                    case 'resting':
+                        // Move slowly but continuously
+                        this.pathAngle += this.curveDirection * this.curveSpeed * 0.1;
+                        this.speed = this.baseSpeed * 0.5; // Faster resting
+                        break;
+                        
+                    case 'exploring':
+                        // Move more erratically, change direction often
+                        this.pathAngle += this.curveDirection * this.curveSpeed * 1.5;
+                        if (Math.random() < 0.01) { // 1% chance to change direction
+                            this.curveDirection *= -1;
+                        }
+                        this.speed = this.baseSpeed * 0.8;
+                        break;
+                        
+                    case 'cruising':
+                    default:
+                        // Normal swimming
+                        this.pathAngle += this.curveDirection * this.curveSpeed;
+                        if (Math.random() < 0.0005) { // Very rarely adjust curve parameters
+                            this.curveDirection *= -1;
+                            this.curveSpeed = 0.0005 + Math.random() * 0.001;
+                        }
+                        break;
+                }
+            }
+            
+            pickNewDestination() {
+                // Pick random destination anywhere on canvas
+                this.targetX = Math.random() * canvas.width;
+                this.targetY = Math.random() * canvas.height;
+                this.isPaused = false;
+            }
+            
+            changeFishType() {
+                // All fish are now straight swimmers
+                this.fishType = 'straight';
+                
+                // Initialize properties for straight swimming
+                // Keep current direction for natural movement from edge spawning
+                // Reset behavior system for straight fish
+                this.currentBehavior = 'cruising';
+                this.behaviorDuration = 3000 + Math.random() * 7000;
+            }
+            
+            validateStraightFishDirection() {
+                // One-time validation to fix any straight fish with wrong directions
+                if (this.fishType === 'straight') {
+                    if (!this.straightFishDirection) {
+                        this.straightFishDirection = Math.random() > 0.5 ? 'up' : 'down';
+                    }
+                    
+                    // Force correct direction to fix any backward swimming
+                    if (this.straightFishDirection === 'up') {
+                        this.direction = Math.PI/2; // Face down (since up fish move down)
+                    } else {
+                        this.direction = -Math.PI/2; // Face up (since down fish move up)
+                    }
+                }
+            }
+            
+            checkDepth() {
+                // Check if fish is under or near a lily pad
+                let underLilyPad = false;
+                lilyPads.forEach(pad => {
+                    const dist = Math.hypot(pad.x - this.x, pad.y - this.y);
+                    if (dist < 60) {
+                        underLilyPad = true;
+                    }
+                });
+                
+                if (underLilyPad) {
+                    this.scale = this.baseScale * 0.8; // Smaller when under lily pad
+                    this.opacity = 0.6; // Semi-transparent
+                    this.shadowOffset = 4; // Less shadow offset
+                } else {
+                    this.scale = this.baseScale;
+                    this.opacity = 1.0;
+                    this.shadowOffset = 8;
+                }
+            }
+            
+            drawShadow() {
+                ctx.save();
+                ctx.globalAlpha = 0.3;
+                ctx.fillStyle = '#000033';
+                ctx.beginPath();
+                ctx.ellipse(this.x + this.shadowOffset, this.y + this.shadowOffset, 
+                           15 * this.scale, 8 * this.scale, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                
+                // Calculate rotation using dragonfly-style formula for natural orientation
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                const rotation = Math.atan2(dy, dx) * (180/Math.PI) - 90 + 180;
+                
+                // Determine fish type and use appropriate image
+                let img, flipX = 1, flipY = 1;
+                
+                // All fish are straight type
+                this.fishType = 'straight';
+                img = assets[`koi-${this.color}-straight`];
+                
+                const scaledWidth = img.width * this.scale;
+                const scaledHeight = img.height * this.scale;
+                
+                // Position and draw fish
+                ctx.translate(this.x, this.y);
+                
+                // Apply dragonfly-style rotation for natural orientation
+                ctx.rotate(rotation * Math.PI / 180); // Convert back to radians
+                ctx.scale(flipX, flipY);
+                ctx.drawImage(img, -scaledWidth/2, -scaledHeight/2, scaledWidth, scaledHeight);
+                
+                ctx.restore();
+            }
+        }
+        
+        class Dragonfly {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.scale = 0.25 * globalScale; // Smaller size with responsive scaling
+                this.speed = 1.0 + Math.random() * 0.8; // Faster movement: 1.0-1.8
+                this.shadowOffset = 6 * globalScale; // Shadow distance with responsive scaling
+                
+                // Destination system
+                this.targetX = x;
+                this.targetY = y;
+                this.isPaused = false;
+                this.pauseStartTime = 0;
+                this.pauseDuration = 500 + Math.random() * 500; // 0.5-1 second pause
+                
+                // Nudge velocity properties for click interactions
+                this.dragVelocityX = 0;
+                this.dragVelocityY = 0;
+                this.airResistance = 0.95; // Air physics (less resistance than water)
+                this.isNudging = false;
+                this.shouldPickNewDestination = false;
+                
+                // Pick first destination
+                this.pickNewDestination();
+            }
+            
+            pickNewDestination() {
+                // Pick random destination anywhere on canvas
+                this.targetX = Math.random() * canvas.width;
+                this.targetY = Math.random() * canvas.height;
+                this.isPaused = false;
+            }
+            
+            update() {
+                // Handle nudge override from click interactions
+                if (Math.abs(this.dragVelocityX) > 0.01 || Math.abs(this.dragVelocityY) > 0.01) {
+                    this.isNudging = true;
+                    // Apply nudge movement
+                    this.x += this.dragVelocityX;
+                    this.y += this.dragVelocityY;
+                    // Apply air resistance
+                    this.dragVelocityX *= this.airResistance;
+                    this.dragVelocityY *= this.airResistance;
+                    // Mark for new destination after nudge completes
+                    this.shouldPickNewDestination = true;
+                } else {
+                    this.isNudging = false;
+                    // Pick new destination if nudge just completed
+                    if (this.shouldPickNewDestination) {
+                        this.pickNewDestination();
+                        this.shouldPickNewDestination = false;
+                    }
+                    
+                    // Normal movement logic
+                    if (this.isPaused) {
+                        // Check if pause is over
+                        if (Date.now() - this.pauseStartTime > this.pauseDuration) {
+                            this.pickNewDestination();
+                        }
+                    } else {
+                        // Move toward target
+                        const dx = this.targetX - this.x;
+                        const dy = this.targetY - this.y;
+                        const distance = Math.hypot(dx, dy);
+                        
+                        if (distance < 5) {
+                            // Reached destination, brief pause
+                            this.isPaused = true;
+                            this.pauseStartTime = Date.now();
+                            this.pauseDuration = 500 + Math.random() * 500; // 0.5-1 second
+                        } else {
+                            // Move toward target
+                            const moveX = (dx / distance) * this.speed;
+                            const moveY = (dy / distance) * this.speed;
+                            this.x += moveX;
+                            this.y += moveY;
+                        }
+                    }
+                }
+            }
+            
+            drawShadow() {
+                ctx.save();
+                ctx.globalAlpha = 0.3;
+                ctx.fillStyle = '#000033';
+                ctx.beginPath();
+                ctx.ellipse(this.x + this.shadowOffset, this.y + this.shadowOffset, 
+                           12 * this.scale, 6 * this.scale, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+            
+            draw() {
+                this.drawShadow();
+                
+                ctx.save();
+                
+                // Translate to position
+                ctx.translate(this.x, this.y);
+                
+                // Calculate rotation using exact formula + 180 degrees to face forward
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                const rotation = Math.atan2(dy, dx) * (180/Math.PI) - 90 + 180;
+                ctx.rotate(rotation * Math.PI / 180); // Convert back to radians
+                
+                const img = assets[this.type];
+                const scaledWidth = img.width * this.scale;
+                const scaledHeight = img.height * this.scale;
+                ctx.drawImage(img, -scaledWidth/2, -scaledHeight/2, scaledWidth, scaledHeight);
+                
+                ctx.restore();
+            }
+        }
+        
+        class Lotus {
+            constructor(x, y, attachedLilyPad = null) {
+                this.x = x;
+                this.y = y;
+                this.baseX = x;
+                this.baseY = y;
+                this.scale = 0.3 + Math.random() * 0.2;
+                this.opacity = 0.9 + Math.random() * 0.1;
+                this.bobOffset = Math.random() * Math.PI * 2;
+                this.bobSpeed = 0.08 + Math.random() * 0.04;
+                // Remove rotation properties - lotus no longer spins
+                
+                // Drag velocity properties for nudge effect
+                this.dragVelocityX = 0;
+                this.dragVelocityY = 0;
+                this.waterResistance = 0.92; // Same as lily pads
+                
+                // Link to lily pad if attached
+                this.attachedLilyPad = attachedLilyPad;
+                if (attachedLilyPad) {
+                    this.offsetX = x - attachedLilyPad.x;
+                    this.offsetY = y - attachedLilyPad.y;
+                }
+            }
+            
+            update(time) {
+                if (this.attachedLilyPad) {
+                    // Move with the attached lily pad
+                    this.x = this.attachedLilyPad.x + this.offsetX;
+                    this.y = this.attachedLilyPad.y + this.offsetY;
+                    this.baseX = this.x;
+                    this.baseY = this.y;
+                } else {
+                    // Apply drag velocity for nudge effect
+                    if (Math.abs(this.dragVelocityX) > 0.01 || Math.abs(this.dragVelocityY) > 0.01) {
+                        this.baseX += this.dragVelocityX;
+                        this.baseY += this.dragVelocityY;
+                        this.dragVelocityX *= this.waterResistance;
+                        this.dragVelocityY *= this.waterResistance;
+                    }
+                    
+                    // Gentle floating movement only - no rotation
+                    this.x = this.baseX + Math.sin(time * this.bobSpeed + this.bobOffset) * 3;
+                    this.y = this.baseY + Math.cos(time * this.bobSpeed + this.bobOffset * 1.3) * 2;
+                }
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.translate(this.x, this.y);
+                // Remove rotation - lotus no longer spins
+                ctx.scale(this.scale, this.scale);
+                const img = assets['Lotus'];
+                ctx.drawImage(img, -img.width/2, -img.height/2);
+                ctx.restore();
+            }
+        }
+                
+        class Ripple {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 5;
+                this.maxRadius = 150; // Larger maximum radius
+                this.opacity = 0.8; // Higher initial opacity
+            }
+            
+            update() {
+                this.radius += 3; // Faster expansion
+                this.opacity = Math.max(0, 0.8 * (1 - this.radius / this.maxRadius));
+                return this.radius < this.maxRadius;
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                const img = assets['ripple'];
+                ctx.drawImage(img, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+                ctx.restore();
+            }
+        }
+        
+        function init() {
+            // TEST: Clear and recreate lily pads
+            lilyPads = [];
+            
+            // Create 3-4 lily pads at completely random positions within frame
+            const numLilyPads = 3 + Math.floor(Math.random() * 2); // 3-4 lily pads
+            const minDistance = 120; // Minimum distance between lily pads to prevent overlap
+            
+            for (let i = 0; i < numLilyPads; i++) {
+                const types = ['lilypad-blue-small', 'lilypad-darkgreen-large', 'lilypad-darkgreen-small', 'lilypad-green-large', 'lilypad-green-small'];
+                const randomType = types[Math.floor(Math.random() * types.length)];
+                
+                // Keep trying positions until we find one that doesn't overlap
+                let attempts = 0;
+                let validPosition = false;
+                let randomX, randomY;
+                
+                while (!validPosition && attempts < 100) {
+                    // Ensure lily pads stay within visible frame with 150px margin
+                    // Use CSS dimensions, not canvas dimensions (canvas is scaled by dpr)
+                    randomX = Math.random() * (window.innerWidth - 300) + 150;
+                    randomY = Math.random() * (window.innerHeight - 300) + 150;
+                    
+                    validPosition = true;
+                    
+                    // Check against existing lily pads
+                    for (let j = 0; j < lilyPads.length; j++) {
+                        const existingPad = lilyPads[j];
+                        const distance = Math.hypot(existingPad.x - randomX, existingPad.y - randomY);
+                        if (distance < minDistance) {
+                            validPosition = false;
+                            break;
+                        }
+                    }
+                    
+                    attempts++;
+                }
+                
+                if (validPosition) {
+                    lilyPads.push(new LilyPad(randomX, randomY, randomType));
+                }
+            }
+            
+            // TEST: Log to verify this is running
+            if (typeof window !== 'undefined') {
+                window.lilyPadTest = `Created ${lilyPads.length} lily pads at ${new Date().toLocaleTimeString()}`;
+                console.log(window.lilyPadTest);
+            }
+            
+            // Create max 1-2 lotus flowers on lily pads
+            const lilyPadCount = lilyPads.length; // Store original count
+            const numLotusOnPads = Math.min(1 + Math.floor(Math.random() * 2), lilyPadCount); // 1-2 lotus flowers, but not more than lily pads
+            
+            for (let i = 0; i < numLotusOnPads; i++) {
+                const lilyPad = lilyPads[i];
+                
+                // Create lotus attached to the lily pad with slight random offset
+                const offsetX = (Math.random() - 0.5) * 20; // ±10 pixels offset
+                const offsetY = (Math.random() - 0.5) * 20; // ±10 pixels offset
+                const lotus = new Lotus(lilyPad.x + offsetX, lilyPad.y + offsetY, lilyPad);
+                lilyPads.push(lotus);
+            }
+            
+            // Create 1-2 lotus flowers on their own in the pond
+            const numStandaloneLotus = 1 + Math.floor(Math.random() * 2); // 1-2 standalone lotus flowers
+            for (let i = 0; i < numStandaloneLotus; i++) {
+                // Keep trying positions until we find one that doesn't overlap with lily pads
+                let attempts = 0;
+                let validPosition = false;
+                let randomX, randomY;
+                
+                while (!validPosition && attempts < 100) {
+                    // Random positioning within frame like lily pads
+                    randomX = Math.random() * (window.innerWidth - 300) + 150;
+                    randomY = Math.random() * (window.innerHeight - 300) + 150;
+                    
+                    validPosition = true;
+                    
+                    // Check against all lily pads and lotus flowers (same z-index)
+                    for (let j = 0; j < lilyPads.length; j++) {
+                        const existingPad = lilyPads[j];
+                        const distance = Math.hypot(existingPad.x - randomX, existingPad.y - randomY);
+                        if (distance < 80) { // Minimum distance to prevent overlap
+                            validPosition = false;
+                            break;
+                        }
+                    }
+                    
+                    attempts++;
+                }
+                
+                if (validPosition) {
+                    const lotus = new Lotus(randomX, randomY);
+                    lilyPads.push(lotus);
+                }
+            }
+            
+            // Create koi fish with random edge spawning
+            const colors = ['black', 'orange', 'red'];
+            
+            for (let i = 0; i < 6; i++) {
+                // Random edge spawning
+                const edge = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+                let x, y, direction;
+                
+                switch(edge) {
+                    case 0: // top edge
+                        x = Math.random() * window.innerWidth;
+                        y = 0;
+                        direction = Math.PI/2 + (Math.random() - 0.5) * Math.PI/4; // Downward with slight variation
+                        break;
+                    case 1: // right edge
+                        x = window.innerWidth;
+                        y = Math.random() * window.innerHeight;
+                        direction = Math.PI + (Math.random() - 0.5) * Math.PI/4; // Leftward with slight variation
+                        break;
+                    case 2: // bottom edge
+                        x = Math.random() * window.innerWidth;
+                        y = window.innerHeight;
+                        direction = -Math.PI/2 + (Math.random() - 0.5) * Math.PI/4; // Upward with slight variation
+                        break;
+                    case 3: // left edge
+                        x = 0;
+                        y = Math.random() * window.innerHeight;
+                        direction = (Math.random() - 0.5) * Math.PI/4; // Rightward with slight variation
+                        break;
+                }
+                
+                const fish = new KoiFish(x, y, colors[i % 3]);
+                fish.direction = direction; // Set initial direction toward pond
+                fish.changeFishType(); // All fish are straight swimmers
+                fish.pickNewDestination(); // Initialize destination system
+                koiFish.push(fish);
+            }
+            
+                        
+            // Create dragonflies
+            dragonflies = [
+                new Dragonfly(window.innerWidth * 0.25, window.innerHeight * 0.08, 'dragonfly-1'),
+                new Dragonfly(window.innerWidth * 0.75, window.innerHeight * 0.12, 'dragonfly-2')
+            ];
+            
+            animate();
+        }
+        
+        function animate() {
+            // Clear and draw background
+            ctx.drawImage(assets['background'], 0, 0, canvas.width, canvas.height);
+            
+            const time = Date.now() * 0.001;
+                        
+            // Update and draw koi fish
+            koiFish.forEach(fish => {
+                fish.update();
+                fish.draw();
+            });
+            
+            // Update and draw ripples
+            ripples = ripples.filter(ripple => {
+                const alive = ripple.update();
+                if (alive) ripple.draw();
+                return alive;
+            });
+            
+                        
+                        
+            // Update and draw lily pads
+            lilyPads.forEach(pad => {
+                pad.update(time);
+                pad.draw();
+            });
+            
+            // Update and draw dragonflies last (highest z-index)
+            dragonflies.forEach(dragonfly => {
+                dragonfly.update();
+                dragonfly.draw();
+            });
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // Mouse interactions
+        let draggedLilyPad = null;
+        
+        canvas.addEventListener('mousedown', (e) => {
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+            
+            // Check if clicking on a lily pad
+            for (let pad of lilyPads) {
+                if (pad.isPointInside(mouseX, mouseY)) {
+                    draggedLilyPad = pad;
+                    pad.startDrag(mouseX, mouseY);
+                    e.preventDefault();
+                    return;
+                }
+            }
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (draggedLilyPad) {
+                draggedLilyPad.drag(e.clientX, e.clientY);
+                e.preventDefault();
+            }
+        });
+        
+        canvas.addEventListener('mouseup', (e) => {
+            if (draggedLilyPad) {
+                draggedLilyPad.endDrag();
+                draggedLilyPad = null;
+                e.preventDefault();
+            }
+        });
+        
+        canvas.addEventListener('click', (e) => {
+            // Only create ripple if not dragging a lily pad
+            if (!draggedLilyPad) {
+                const rect = canvas.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickY = e.clientY - rect.top;
+                ripples.push(new Ripple(e.clientX, e.clientY));
+                
+                // Nudge lily pads and lotus flowers opposite to click direction
+                lilyPads.forEach(pad => {
+                    const distance = Math.hypot(pad.x - clickX, pad.y - clickY);
+                    
+                    if (distance < 200 && distance > 0) { // Affect pads within 200px of click
+                        // Calculate nudge direction (away from click)
+                        const dx = pad.x - clickX;
+                        const dy = pad.y - clickY;
+                        const normalizedDistance = distance / 200; // Normalize for distance-based strength
+                        
+                        // Apply subtle nudge based on distance (closer = stronger nudge)
+                        const nudgeStrength = 5 * (1 - normalizedDistance); // Max 5px nudge
+                        const nudgeX = (dx / distance) * nudgeStrength;
+                        const nudgeY = (dy / distance) * nudgeStrength;
+                        
+                        // Apply nudge as drag velocity for smooth movement
+                        pad.dragVelocityX = nudgeX;
+                        pad.dragVelocityY = nudgeY;
+                    }
+                });
+                
+                // Nudge fish opposite to click direction
+                koiFish.forEach(fish => {
+                    const distance = Math.hypot(fish.x - clickX, fish.y - clickY);
+                    
+                    if (distance < 200 && distance > 0) { // Affect fish within 200px of click
+                        // Calculate nudge direction (away from click)
+                        const dx = fish.x - clickX;
+                        const dy = fish.y - clickY;
+                        const normalizedDistance = distance / 200; // Normalize for distance-based strength
+                        
+                        // Apply subtle nudge based on distance (closer = stronger nudge)
+                        const nudgeStrength = 5 * (1 - normalizedDistance); // Max 5px nudge
+                        const nudgeX = (dx / distance) * nudgeStrength;
+                        const nudgeY = (dy / distance) * nudgeStrength;
+                        
+                        // Apply nudge as drag velocity for smooth movement
+                        fish.dragVelocityX = nudgeX;
+                        fish.dragVelocityY = nudgeY;
+                    }
+                });
+                
+                // Nudge dragonflies opposite to click direction
+                dragonflies.forEach(dragonfly => {
+                    const distance = Math.hypot(dragonfly.x - clickX, dragonfly.y - clickY);
+                    
+                    if (distance < 200 && distance > 0) { // Affect dragonflies within 200px of click
+                        // Calculate nudge direction (away from click)
+                        const dx = dragonfly.x - clickX;
+                        const dy = dragonfly.y - clickY;
+                        const normalizedDistance = distance / 200; // Normalize for distance-based strength
+                        
+                        // Apply subtle nudge based on distance (closer = stronger nudge)
+                        const nudgeStrength = 5 * (1 - normalizedDistance); // Max 5px nudge
+                        const nudgeX = (dx / distance) * nudgeStrength;
+                        const nudgeY = (dy / distance) * nudgeStrength;
+                        
+                        // Apply nudge as drag velocity for smooth movement
+                        dragonfly.dragVelocityX = nudgeX;
+                        dragonfly.dragVelocityY = nudgeY;
+                    }
+                });
+                
+                // Check if clicked directly on a fish
+                let clickedOnFish = false;
+                koiFish.forEach(fish => {
+                    const distance = Math.hypot(fish.x - clickX, fish.y - clickY);
+                    
+                    if (distance < 40) {
+                        // Clicked directly on fish - make them swim away fast
+                        clickedOnFish = true;
+                        
+                        // Calculate direction away from click
+                        const dx = fish.x - clickX;
+                        const dy = fish.y - clickY;
+                        const angle = Math.atan2(dy, dx);
+                        
+                        // Turn fish to face away and swim fast
+                        fish.pathAngle = angle;
+                        fish.startReaction('flee', {x: clickX, y: clickY}, 3000, 3.5);
+                    } else if (distance < 150) {
+                        // Near the click - react normally
+                        fish.startReaction('flee', {x: clickX, y: clickY}, 2000, 2.5);
+                    }
+                });
+            }
+        });
+        
+        // Prevent context menu
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
