@@ -117,7 +117,7 @@
 <body>
     <!-- Pond Music Audio -->
     <audio id="pondMusic" autoplay loop volume="0.1">
-        <source src="Pond Music.mp3" type="audio/mpeg">
+        <source src="pond music.mp3" type="audio/mpeg">
         Your browser does not support the audio element.
     </audio>
     
@@ -171,31 +171,31 @@
         const pondMusic = document.getElementById('pondMusic');
         let musicStarted = false;
         
-        // Function to start music (handles autoplay restrictions)
+        // Simple function to start music
         function startMusic() {
-            if (!musicStarted) {
+            if (!musicStarted && pondMusic) {
                 pondMusic.play().then(() => {
                     musicStarted = true;
-                    console.log('Pond music started automatically');
+                    console.log('Pond music started');
                 }).catch(error => {
-                    console.log('Autoplay prevented, will start on first user interaction');
+                    console.log('Music autoplay blocked, waiting for user interaction');
                     // Add click listener to start music on first interaction
-                    document.addEventListener('click', function startMusicOnClick() {
-                        pondMusic.play().then(() => {
-                            musicStarted = true;
-                            console.log('Pond music started on user interaction');
-                        }).catch(err => {
-                            console.log('Could not start music:', err);
-                        });
-                        // Remove this listener after first click
-                        document.removeEventListener('click', startMusicOnClick);
+                    document.addEventListener('click', function() {
+                        if (!musicStarted && pondMusic) {
+                            pondMusic.play().then(() => {
+                                musicStarted = true;
+                                console.log('Pond music started on click');
+                            }).catch(err => {
+                                console.log('Could not start music:', err);
+                            });
+                        }
                     }, { once: true });
                 });
             }
         }
         
-        // Try to start music immediately
-        startMusic();
+        // Start music when page loads
+        window.addEventListener('load', startMusic);
         
         // Get device pixel ratio for crisp rendering on high-DPI displays
         const dpr = window.devicePixelRatio || 1;
